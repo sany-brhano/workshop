@@ -1,37 +1,59 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
+	"github.com/FTBpro/go-workshop/coolfacts/entrypoint/fact"
+	"github.com/FTBpro/go-workshop/coolfacts/entrypoint/mentalfloss"
+	"github.com/FTBpro/go-workshop/coolfacts/entrypoint/myhttp"
 	"log"
 	"net/http"
+	"time"
 )
 
-func main() {
-	factsRepo := repo{
-		facts: []fact{
-			{Image: "pic1", Description: "DOGS PIC"},
-		},
+var factRepo fact.Repo
+
+func mfUpdate() error {
+	mfFacts, err := mentalfloss.Mentalfloss{}.Facts()
+	if err != nil {
+		log.Fatal(err)
 	}
-	factsRepo.add(fact{
-		Image:       "https://images2.minutemediacdn.com/image/upload/v1556645500/shape/cover/entertainment/D5aliXvWsAEcYoK-fe997566220c082b98030508e654948e.jpg",
-		Description: "Did you know sonic is a hedgehog?!",
-	})
+	factRepo = fact.Repo{}
+	for _, val := range mfFacts {
+		factRepo.Add(val)
+	}
+	return nil
+}
 
-	http.HandleFunc("/facts", func(w http.ResponseWriter, r *http.Request) {
-		allFacts := factsRepo.getAll()
-		bs, err := json.Marshal(allFacts)
-		if err != nil {
-			errMessage := fmt.Sprintf(" marshal error")
-			http.Error(w, errMessage, http.StatusInternalServerError)
+func updateFactsWithTicker(ctx context.Context, updateFunc func() error) {
+	ticker := time.NewTicker(5 * time.Millisecond)
+	go func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				err := updateFunc()
+				if err != nil {
+					fmt.Println("error executing html: ", err)
+				}
+				fmt.Println("updating mentalfloss facts")
+			}
 		}
-		_, err = w.Write(bs)
-		if err != nil {
-			errMessage := fmt.Sprintf("error writing response: %v", err)
-			http.Error(w, errMessage, http.StatusInternalServerError)
-		}
+	}(ctx)
+}
 
-	})
+func main() {
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	updateFactsWithTicker(ctx, mfUpdate)
+
+	handlerer := myhttp.FactsHandler{
+		FactRepo: &factRepo,
+	}
+	http.HandleFunc("/ping", handlerer.Ping)
+	http.HandleFunc("/facts", handlerer.Facts)
 
 	log.Println("starting server")
 	err := http.ListenAndServe(":9002", nil)
