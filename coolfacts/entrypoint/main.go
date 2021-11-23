@@ -4,54 +4,23 @@ import (
 	"context"
 	"fmt"
 	"github.com/FTBpro/go-workshop/coolfacts/entrypoint/fact"
-	"github.com/FTBpro/go-workshop/coolfacts/entrypoint/mentalfloss"
+	"github.com/FTBpro/go-workshop/coolfacts/entrypoint/inmem"
 	"github.com/FTBpro/go-workshop/coolfacts/entrypoint/myhttp"
+	"github.com/FTBpro/go-workshop/coolfacts/entrypoint/providers/mentalfloss"
 	"log"
 	"net/http"
-	"time"
 )
 
-var factRepo fact.Repo
-
-func mfUpdate() error {
-	mfFacts, err := mentalfloss.Mentalfloss{}.Facts()
-	if err != nil {
-		log.Fatal(err)
-	}
-	factRepo = fact.Repo{}
-	for _, val := range mfFacts {
-		factRepo.Add(val)
-	}
-	return nil
-}
-
-func updateFactsWithTicker(ctx context.Context, updateFunc func() error) {
-	ticker := time.NewTicker(5 * time.Millisecond)
-	go func(ctx context.Context) {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				err := updateFunc()
-				if err != nil {
-					fmt.Println("error executing html: ", err)
-				}
-				fmt.Println("updating mentalfloss facts")
-			}
-		}
-	}(ctx)
-}
-
 func main() {
+	factsRepo := inmem.NewFactRepository()
+	mentalflossProvider := mentalfloss.NewProvider()
+	service := fact.NewService(factsRepo, mentalflossProvider)
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-	updateFactsWithTicker(ctx, mfUpdate)
+	service.UpdateFactsWithTicker(ctx, service.UpdateFacts)
 
-	handlerer := myhttp.FactsHandler{
-		FactRepo: &factRepo,
-	}
+	handlerer := myhttp.NewFactsHandler(factsRepo)
 	http.HandleFunc("/ping", handlerer.Ping)
 	http.HandleFunc("/facts", handlerer.Facts)
 
