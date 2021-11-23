@@ -18,7 +18,7 @@ var newsTemplate = `<!DOCTYPE html>
     {{ range . }}
        <article>
             <h3>{{.Description}}</h3>
-            <img src="{{.Image}}" width="100%" />
+            <img src="{{.Image}}" width="80%" />
        </article>
     {{ end }}
   <div>
@@ -26,15 +26,14 @@ var newsTemplate = `<!DOCTYPE html>
 </html>`
 
 func main() {
-	factsRepo := repo{
-		facts: []fact{
-			{Image: "pic1", Description: "DOGS PIC"},
-		},
+	mfRepo := repo{}
+	mfFactsRepo, err := mentalfloss{}.Facts()
+	if err != nil {
+		log.Fatal("error can't reach mentalfloss: ", err)
 	}
-	factsRepo.add(fact{
-		Image:       "https://images2.minutemediacdn.com/image/upload/v1556645500/shape/cover/entertainment/D5aliXvWsAEcYoK-fe997566220c082b98030508e654948e.jpg",
-		Description: "Did you know sonic is a hedgehog?!",
-	})
+	for _, f := range mfFactsRepo {
+		mfRepo.add(f)
+	}
 
 	http.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
 		_, err := fmt.Fprint(w, "PONG")
@@ -49,7 +48,7 @@ func main() {
 			if err != nil {
 				fmt.Println("error parsing facts to html: ", err)
 			}
-			facts := factsRepo.getAll()
+			facts := mfFactsRepo
 			err = tmpl.Execute(w, facts)
 			if err != nil {
 				errMessage := fmt.Sprintf("error executing html: %v", err)
@@ -72,7 +71,7 @@ func main() {
 				Image:       factPost.Image,
 				Description: factPost.Description,
 			}
-			factsRepo.add(f)
+			mfRepo.add(f)
 			_, wErr := w.Write([]byte("SUCCESS"))
 			if wErr != nil {
 				errMessage := fmt.Sprintf("error writing response: %v", err)
@@ -81,8 +80,8 @@ func main() {
 		}
 	})
 	log.Println("starting server")
-	err := http.ListenAndServe(":9002", nil)
+	serverErr := http.ListenAndServe(":9002", nil)
 	if err != nil {
-		fmt.Println("error listening server: ", err)
+		fmt.Println("error listening server: ", serverErr)
 	}
 }
